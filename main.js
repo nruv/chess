@@ -20,7 +20,7 @@ const PAD = 6;
 const BAR_W = 30;
 const GAP = 10;
 const LEFT = PAD + BAR_W + GAP;
-const RIGHT = GAP + BAR_W + PAD;
+const RIGHT = PAD;
 let nudge = { x: 0, y: 0 };
 try { nudge = JSON.parse(fs.readFileSync(CFG, 'utf8')); } catch {}
 
