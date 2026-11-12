@@ -1,0 +1,229 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+  html,body{margin:0;background:transparent;overflow:hidden;cursor:none}
+  svg{position:fixed;inset:0;width:100vw;height:100vh}
+  #hud{position:fixed;left:42px;top:8px;font:11px monospace;color:#22ff88;opacity:.55;text-shadow:0 0 3px #000}
+  .pct{position:fixed;font:10px/1.2 monospace;color:#fff;padding:1px 4px;border:1px solid rgba(0,0,0,.9);
+       pointer-events:none;white-space:nowrap;transform:translateX(-100%)}
+  .note{position:fixed;font:10px/1.2 monospace;color:#4b2fa8;background:rgba(185,166,232,.92);
+        padding:1px 4px;border:1px solid rgba(0,0,0,.9);pointer-events:none;white-space:nowrap;
+        transform:translateX(-100%)}
+</style></head><body>
+<svg id="s"></svg><div id="hud"></div>
+<script>
+const svg = document.getElementById('s'), hud = document.getElementById('hud');
+const sqName = s => [s.charCodeAt(0) - 96, +s[1]];
+const winPct = cp => Math.max(5, Math.min(95, 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * cp)) - 1)));
+const PAD = 6, BAR_W = 30, GAP = 10, LEFT = PAD + BAR_W + GAP, RIGHT = GAP + BAR_W + PAD;
+const FONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, Helvetica, Arial, sans-serif';
+const GLYPHFONT = '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "Segoe UI Symbol", "Noto Color Emoji", "Apple Color Emoji", sans-serif';
+
+const STYLE = [
+  { ring: 'rgba(72,72,72,.62)', dot: 'rgba(72,72,72,.62)', badge: 'rgba(84,84,84,.85)' },
+  { ring: 'rgba(206,206,206,.72)', dot: 'rgba(206,206,206,.72)', badge: 'rgba(120,120,120,.85)' }
+];
+const TEAL = 'rgba(38,194,163,.85)';
+const PURPLE = 'rgba(139,92,246,.8)';
+
+const GRADE = {
+  brilliant:  { c: '#26c2a3', s: '!!' },
+  great:      { c: '#5c8bb0', s: '!' },
+  best:       { c: '#81b64c', s: '★' },
+  excellent:  { c: '#96bc4b', s: '✓' },
+  good:       { c: '#95b776', s: '✓' },
+  book:       { c: '#a88865', s: '📖' },
+  forced:     { c: '#9c9c9c', s: '→', ink: '#222' },
+  inaccuracy: { c: '#f7c631', s: '?!', ink: '#222' },
+  miss:       { c: '#ff7769', s: '✗' },
+  mistake:    { c: '#ffa459', s: '?' },
+  blunder:    { c: '#fa412d', s: '??' },
+  mate:       { c: '#e8e8e8', s: '#', ink: '#222' }
+};
+
+let nudge = { x: 0, y: 0 };
+let colorOf = new Map(), lastFen = '';
+let barHover = false, lastD = null, gradeState = null;
+
+window.api.on('nudge', n => { nudge = n; });
+window.api.on('barhover', v => {
+  if (v === barHover) return;
+  barHover = v;
+  render(lastD);
+});
+
+const styleFor = uci => {
+  if (colorOf.has(uci)) return colorOf.get(uci);
+  const used = new Set(colorOf.values());
+  const idx = used.has(0) ? 1 : 0;
+  colorOf.set(uci, idx);
+  return idx;
+};
+
+const barFrac = s => {
+  if (!Number.isFinite(s)) return 0.5;
+  if (Math.abs(s) >= 99) return s > 0 ? 0.99 : 0.01;
+  const f = 50 + 50 * (2 / (1 + Math.exp(-0.006708 * s * 100)) - 1);
+  return Math.max(0.01, Math.min(0.99, f / 100));
+};
+
+function render(d) {
+  svg.innerHTML = '';
+  document.querySelectorAll('.pct, .note').forEach(e => e.remove());
+  if (!d || (!d.best && !d.premove && !gradeState)) { hud.textContent = 'waiting'; return; }
+
+  if (d && d.fen !== lastFen) { colorOf.clear(); lastFen = d.fen; }
+
+  const sq = d.rect.w / 8;
+  const px = f => LEFT + (d.flipped ? (8 - f + 0.5) : (f - 0.5)) * sq + nudge.x;
+  const py = r => PAD + (d.flipped ? (r - 0.5) : (8 - r + 0.5)) * sq + nudge.y;
+
+  const corner = (uci, side) => {
+    const [f, r] = sqName(uci.slice(2, 4));
+    return side === 'l'
+      ? { left: (px(f) - sq * 0.5 + 3) + 'px', top: (py(r) - sq * 0.5 + 3) + 'px', transform: 'none' }
+      : { left: (px(f) + sq * 0.5 - 3) + 'px', top: (py(r) - sq * 0.5 + 3) + 'px' };
+  };
+
+  let out = '';
+
+  if (Number.isFinite(d.whiteScore)) {
+    const h = d.rect.h, x = PAD, top = PAD;
+    const frac = barFrac(d.whiteScore);
+    const whiteH = h * frac;
+    const mate = Math.abs(d.whiteScore) >= 99;
+
+    out += `<rect x="${x}" y="${top}" width="${BAR_W}" height="${h}" rx="2" fill="rgba(255,255,255,0.05)"/>`;
+    if (d.flipped) {
+      out += `<rect x="${x}" y="${top}" width="${BAR_W}" height="${whiteH}" fill="#fff"/>`;
+      out += `<rect x="${x}" y="${top + whiteH}" width="${BAR_W}" height="${h - whiteH}" fill="rgb(64,61,57)"/>`;
+    } else {
+      out += `<rect x="${x}" y="${top}" width="${BAR_W}" height="${h - whiteH}" fill="rgb(64,61,57)"/>`;
+      out += `<rect x="${x}" y="${top + h - whiteH}" width="${BAR_W}" height="${whiteH}" fill="#fff"/>`;
+    }
+
+    const label = mate ? 'M' + Math.abs(d.whiteMate ?? 0) : Math.abs(d.whiteScore).toFixed(1);
+    out += `<text x="${x + BAR_W / 2}" y="${top + h - 9}" text-anchor="middle"
+              font-family='${FONT}' font-size="10" font-weight="600"
+              fill="${d.flipped ? '#fff' : 'rgb(64,61,57)'}">${label}</text>`;
+
+    if (barHover) {
+      const bh = 24;
+      const bw = BAR_W + 17;
+      const by2 = top + (h - bh) / 2;
+      const bx2 = x - 6;
+      const whiteUnder = frac >= 0.5;
+      const txt = mate ? 'M' + Math.abs(d.whiteMate ?? 0)
+                       : (d.whiteScore > 0 ? '+' : d.whiteScore < 0 ? '-' : '') + Math.abs(d.whiteScore).toFixed(2);
+      out += `<rect x="${bx2}" y="${by2}" width="${bw}" height="${bh}" rx="3"
+                fill="${whiteUnder ? '#fff' : 'rgb(64,61,57)'}"/>`;
+      out += `<text x="${bx2 + bw / 2}" y="${by2 + 16}" text-anchor="middle"
+                font-family='${FONT}' font-size="12" font-weight="700"
+                fill="${whiteUnder ? 'rgb(64,61,57)' : '#fff'}">${txt}</text>`;
+    }
+  }
+
+  if (Number.isFinite(d.cheat)) {
+    const h = d.rect.h, x = LEFT + d.rect.w + GAP, top = PAD;
+    const f = Math.max(0, Math.min(1, d.cheat));
+    const fh = h * f;
+    out += `<rect x="${x}" y="${top}" width="${BAR_W}" height="${h}" rx="2" fill="rgb(64,61,57)"/>`;
+    if (fh > 0) out += `<rect x="${x}" y="${top + h - fh}" width="${BAR_W}" height="${fh}" fill="#fa412d"/>`;
+    out += `<text x="${x + BAR_W / 2}" y="${top + h - 9}" text-anchor="middle"
+              font-family='${FONT}' font-size="9" font-weight="600"
+              fill="${f > 0.12 ? '#fff' : '#cfcac4'}">${Math.round(f * 100)}</text>`;
+  }
+
+  if (d.best) {
+    const alt = d.alt && d.alt.best && d.alt.best !== d.best ? d.alt.best : null;
+    const sameOrigin = !!alt && d.best.slice(0, 2) === alt.slice(0, 2);
+    const sameDest = !!alt && d.best.slice(2, 4) === alt.slice(2, 4);
+
+    const ring = (uci, color) => {
+      const [f, r] = sqName(uci.slice(0, 2));
+      return `<circle cx="${px(f)}" cy="${py(r)}" r="${sq * 0.40}" fill="none"
+                stroke="${color}" stroke-width="${Math.max(2, sq * 0.045)}"/>`;
+    };
+    const dot = (uci, color) => {
+      const [f, r] = sqName(uci.slice(2, 4));
+      return `<circle cx="${px(f)}" cy="${py(r)}" r="${sq * 0.135}" fill="${color}"/>`;
+    };
+
+    if (sameOrigin) out += ring(d.best, TEAL);
+    else {
+      out += ring(d.best, STYLE[styleFor(d.best)].ring);
+      if (alt) out += ring(alt, STYLE[styleFor(alt)].ring);
+    }
+    if (sameDest) out += dot(d.best, TEAL);
+    else {
+      out += dot(d.best, STYLE[styleFor(d.best)].dot);
+      if (alt) out += dot(alt, STYLE[styleFor(alt)].dot);
+    }
+  }
+
+  if (d.premove && d.premove.best) {
+    const [af, ar] = sqName(d.premove.best.slice(0, 2));
+    const [bf, br] = sqName(d.premove.best.slice(2, 4));
+    const x1 = px(af), y1 = py(ar), x2 = px(bf), y2 = py(br);
+    const ang = Math.atan2(y2 - y1, x2 - x1);
+    const head = sq * 0.34, wdt = Math.max(2, sq * 0.07), dash = sq * 0.12;
+    out += `<line x1="${x1}" y1="${y1}" x2="${x2 - Math.cos(ang) * head}" y2="${y2 - Math.sin(ang) * head}"
+              stroke="${PURPLE}" stroke-width="${wdt}" stroke-dasharray="${dash} ${dash}" stroke-linecap="round"/>`;
+    out += `<polyline points="${x2 - head * Math.cos(ang - 0.5)},${y2 - head * Math.sin(ang - 0.5)} ${x2},${y2} ${x2 - head * Math.cos(ang + 0.5)},${y2 - head * Math.sin(ang + 0.5)}"
+              fill="none" stroke="${PURPLE}" stroke-width="${wdt}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  }
+
+  if (gradeState && Date.now() < gradeState.until && GRADE[gradeState.grade]) {
+    const g = GRADE[gradeState.grade];
+    const [gf, gr] = sqName(gradeState.uci.slice(2, 4));
+    const size = Math.max(18, Math.min(34, sq * 0.42));
+    const gx = px(gf) - sq * 0.5 - size * 0.38;
+    const gy = py(gr) - sq * 0.5 - size * 0.38;
+    out += `<circle cx="${gx + size / 2}" cy="${gy + size / 2}" r="${size / 2}"
+              fill="${g.c}" stroke="rgba(0,0,0,.55)" stroke-width="1"/>`;
+    out += `<text x="${gx + size / 2}" y="${gy + size / 2 + size * 0.19}" text-anchor="middle"
+              font-family='${GLYPHFONT}' font-size="${Math.round(size * 0.55)}" font-weight="900"
+              fill="${g.ink || '#fff'}">${g.s || '?'}</text>`;
+  }
+
+  svg.innerHTML = out;
+
+  const add = (uci, side, cls, text, bg) => {
+    const el = document.createElement('div');
+    el.className = cls;
+    Object.assign(el.style, corner(uci, side));
+    if (bg) el.style.background = bg;
+    el.textContent = text;
+    document.body.appendChild(el);
+  };
+
+  if (d.best) {
+    add(d.best, 'r', 'pct', winPct(d.score * 100).toFixed(1) + '%', STYLE[styleFor(d.best)].badge);
+    if (d.alt && d.alt.best && d.alt.best !== d.best) {
+      const sameDest = d.best.slice(2, 4) === d.alt.best.slice(2, 4);
+      add(d.alt.best, sameDest ? 'l' : 'r', 'pct', winPct(d.alt.score * 100).toFixed(1) + '%', STYLE[styleFor(d.alt.best)].badge);
+    }
+  }
+  if (d.premove && d.premove.best) add(d.premove.best, 'r', 'note', d.premove.san);
+
+  hud.textContent = d.grade ? 'GRADE ' + d.grade.grade + ' ' + d.grade.uci
+                            : d.best ? `${d.best} d${d.depth}` : d.premove ? `premove ${d.premove.san}` : '';
+}
+
+window.api.on('suggest', d => {
+  console.log('[sug]', d && d.whiteScore, d && d.grade, d && d.best);
+  lastD = d;
+  if (d && d.grade && (!gradeState || gradeState.uci !== d.grade.uci || gradeState.grade !== d.grade.grade)) {
+    gradeState = { uci: d.grade.uci, grade: d.grade.grade, until: Date.now() + 3500 };
+    setTimeout(() => {
+      if (gradeState && Date.now() >= gradeState.until) { gradeState = null; render(lastD); }
+    }, 3600);
+  }
+  render(d);
+});
+
+window.__gs = () => {
+  gradeState = { uci: 'e4', grade: 'blunder', until: Date.now() + 99999 };
+  console.log('__gs forced', lastD && lastD.rect);
+  render(lastD);
+};
+</script></body></html>
