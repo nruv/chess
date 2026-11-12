@@ -122,17 +122,6 @@ function render(d) {
     }
   }
 
-  if (Number.isFinite(d.cheat)) {
-    const h = d.rect.h, x = LEFT + d.rect.w + GAP, top = PAD;
-    const f = Math.max(0, Math.min(1, d.cheat));
-    const fh = h * f;
-    out += `<rect x="${x}" y="${top}" width="${BAR_W}" height="${h}" rx="2" fill="rgb(64,61,57)"/>`;
-    if (fh > 0) out += `<rect x="${x}" y="${top + h - fh}" width="${BAR_W}" height="${fh}" fill="#fa412d"/>`;
-    out += `<text x="${x + BAR_W / 2}" y="${top + h - 9}" text-anchor="middle"
-              font-family='${FONT}' font-size="9" font-weight="600"
-              fill="${f > 0.12 ? '#fff' : '#cfcac4'}">${Math.round(f * 100)}</text>`;
-  }
-
   if (d.best) {
     const alt = d.alt && d.alt.best && d.alt.best !== d.best ? d.alt.best : null;
     const sameOrigin = !!alt && d.best.slice(0, 2) === alt.slice(0, 2);
