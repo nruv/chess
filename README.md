@@ -52,8 +52,7 @@ project/
 ├── main.js
 ├── preload.js
 ├── tracker.js
-├── package.json
-└── ...
+└── package.json
 ```
 
 The application automatically looks for Stockfish at `bin/stockfish.exe`.
