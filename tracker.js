@@ -28,13 +28,6 @@ function findPlayed(fen, placement) {
   return null;
 }
 
-function suspicion(cat, rank, gap, loss) {
-  if (cat === 'book' || cat === 'forced' || cat === 'mate') return null;
-  if (rank === 1) return gap >= 0.8 ? 1 : gap >= 0.3 ? 0.7 : 0.45;
-  if (rank === 2) return gap < 0.15 ? 0.45 : 0.15;
-  return Math.max(-1, -0.35 - loss / 25);
-}
-
 const READ = `(() => {
   const b = document.querySelector('wc-chess-board');
   if (!b) return null;
@@ -119,9 +112,6 @@ class Tracker extends EventEmitter {
     this.busy = false; this.lastEmit = 0; this.lastRun = 0; this.gen = 0; this.lastFocus = null;
     this.cache = new Map();
     this.myFen = null; this.myScore = null; this.myAlt = null; this.myMate = null;
-    this.theirFen = null; this.theirBest = null; this.theirAltBest = null;
-    this.theirScore = null; this.theirAlt = null; this.theirMate = null;
-    this.cheat = 0; this.cheatN = 0;
     this.ply = 0;
     this.timer = setInterval(() => this.tick(), 100);
   }
@@ -130,9 +120,6 @@ class Tracker extends EventEmitter {
     this.lastKey = ''; this.pendingKey = ''; this.pendingHits = 0;
     this.lastPlacement = ''; this.gen++; this.cache.clear();
     this.myFen = null; this.myScore = null; this.myAlt = null; this.myMate = null;
-    this.theirFen = null; this.theirBest = null; this.theirAltBest = null;
-    this.theirScore = null; this.theirAlt = null; this.theirMate = null;
-    this.cheat = 0; this.cheatN = 0;
     this.ply = 0;
     this.say(null);
   }
@@ -166,9 +153,6 @@ class Tracker extends EventEmitter {
     if (placement === START && this.lastPlacement !== '' && this.lastPlacement !== START) {
       this.lastKey = ''; this.pendingKey = ''; this.pendingHits = 0; this.cache.clear();
       this.myFen = null; this.myScore = null; this.myAlt = null; this.myMate = null;
-      this.theirFen = null; this.theirBest = null; this.theirAltBest = null;
-      this.theirScore = null; this.theirAlt = null; this.theirMate = null;
-      this.cheat = 0; this.cheatN = 0;
       this.ply = 0;
       this.dbg('new game detected');
     }
@@ -202,8 +186,7 @@ class Tracker extends EventEmitter {
     this.lastKey = fen;
     this.dbg(`board: ${s.pieces.length} pieces, turn=${domTurn}, mine=${myColor}, src=${src}`);
 
-    const base = { ox: s.ox, oy: s.oy, dpr: s.dpr, rect: s.rect, flipped: s.flipped, fen,
-                   cheat: this.cheat };
+    const base = { ox: s.ox, oy: s.oy, dpr: s.dpr, rect: s.rect, flipped: s.flipped, fen };
 
     if (domTurn !== myColor) {
       const g0 = this.gen;
@@ -256,11 +239,6 @@ class Tracker extends EventEmitter {
           return;
         }
 
-        this.theirFen = fen; this.theirBest = r1.best;
-        this.theirAltBest = r1.alt ? r1.alt.best : null;
-        this.theirScore = r1.score; this.theirAlt = r1.alt ? r1.alt.score : null;
-        this.theirMate = r1.mate ?? null;
-
         const fen2 = applyUci(fen, r1.best);
         if (!fen2) {
           this.say({ ...base, whiteScore: domTurn === 'b' ? -r1.score : r1.score, grade });
@@ -281,17 +259,11 @@ class Tracker extends EventEmitter {
       return;
     }
 
-    const theirFen = this.theirFen, theirBest = this.theirBest, theirAltBest = this.theirAltBest;
-    const theirScore = this.theirScore, theirAlt = this.theirAlt, theirMate = this.theirMate;
-    this.theirFen = null; this.theirBest = null; this.theirAltBest = null;
-    this.theirScore = null; this.theirAlt = null; this.theirMate = null;
-    const theirPlayed = theirFen ? findPlayed(theirFen, placement) : null;
-
     if (this.cache.has(fen)) {
       const c = this.cache.get(fen);
       this.myFen = fen; this.myScore = c.score; this.myAlt = c.alt ? c.alt.score : null;
       this.myMate = c.mate ?? null;
-      this.say({ ...c, ...base, cheat: this.cheat,
+      this.say({ ...c, ...base,
                  whiteScore: domTurn === 'b' ? -c.score : c.score,
                  whiteMate: c.mate == null ? null : (domTurn === 'b' ? -c.mate : c.mate) });
       return;
@@ -309,28 +281,7 @@ class Tracker extends EventEmitter {
         this.myFen = fen; this.myScore = res.score; this.myAlt = res.alt ? res.alt.score : null;
         this.myMate = res.mate ?? null;
 
-        if (theirPlayed) {
-          try {
-            const before = {
-              bestMove: theirBest,
-              lines: [{ cp: Math.round(theirScore * 100), mate: theirMate },
-                      theirAlt == null ? null : { cp: Math.round(theirAlt * 100) }]
-            };
-            const after = { lines: [{ cp: Math.round(res.score * 100), mate: res.mate }] };
-            const r = classify(before, after, theirFen, theirPlayed.san, this.ply);
-            const puci = theirPlayed.from + theirPlayed.to + (theirPlayed.promotion || '');
-            const gap = theirAlt == null ? 9 : Math.abs(theirScore - theirAlt);
-            const rank = puci === theirBest ? 1 : puci === theirAltBest ? 2 : 3;
-            const q = suspicion(r.cat, rank, gap, r.loss);
-            if (q != null) {
-              this.cheatN++;
-              this.cheat = Math.max(0, Math.min(1, this.cheat * 0.94 + q * 0.06));
-              console.log('[cheat]', theirPlayed.san, r.cat, 'rank=' + rank, q.toFixed(2), '->', this.cheat.toFixed(2));
-            }
-          } catch (e) { console.log('[cheat] threw:', e.message); }
-        }
-
-        this.say({ ...res, ...base, cheat: this.cheat,
+        this.say({ ...res, ...base,
                    whiteScore: domTurn === 'b' ? -res.score : res.score,
                    whiteMate: res.mate == null ? null : (domTurn === 'b' ? -res.mate : res.mate) });
       } else if (res) { this.dbg('terminal position'); this.say(null); }
