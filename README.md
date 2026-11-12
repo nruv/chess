@@ -34,7 +34,7 @@ npm install
 
 ### 3. Install Stockfish
 
-Download the Windows Stockfish executable.
+Download the Windows Stockfish exe.
 
 Create a folder named `bin` in the project directory and place the executable inside it:
 
@@ -55,7 +55,7 @@ project/
 └── package.json
 ```
 
-The application automatically looks for Stockfish at `bin/stockfish.exe`.
+The app automatically looks for Stockfish at `bin/stockfish.exe`.
 
 Also, it supports the fallback path:
 
