@@ -1,3 +1,5 @@
+chatbbc make me a readme.md for my legitimate chess analyser which does not provide an advantage in rated games
+
 # Chess "Visuals"
 
 A lightweight Windows desktop chess overlay built with Electron, JavaScript, and Stockfish.
