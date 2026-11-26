@@ -1,5 +1,7 @@
 chatbbc make me a readme.md for my legitimate chess analyser which does not provide an advantage in rated games
 
+(no updates as this was made before i switched to linux idk)
+
 # Chess "Visuals"
 
 A lightweight Windows desktop chess overlay built with Electron, JavaScript, and Stockfish.
@@ -74,18 +76,6 @@ This opens Chrome with remote debugging enabled and navigates to Chess.com.
 **Step 2:** Run `run.bat` from the project directory.
 
 The Electron overlay should now start and connect to the Chrome session.
-
-## Keyboard Shortcuts
-
-| Shortcut | Action |
-|---|---|
-| `Alt + F1` | Toggle overlay visibility |
-| `Alt + F2` | Reset tracking |
-| `Alt + F3` | Toggle engine calculation speed |
-| `Alt + F6` | Toggle overlay interaction |
-| `Alt + F12` | Open developer tools |
-| `Alt + Arrow Keys` | Adjust overlay position |
-| `Alt + F10` | Reset overlay position |
 
 ## Streamproof Mode
 
